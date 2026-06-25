@@ -1,181 +1,116 @@
 # MD Reader
 
-**English** | [简体中文](README.zh-CN.md)
+一个面向 Windows 的 Markdown 阅读器，基于 [Neilooo/md-reader](https://github.com/Neilooo/md-reader) 修改维护。
 
-[![Release](https://img.shields.io/github/v/release/Neilooo/md-reader?include_prereleases&color=blue)](https://github.com/Neilooo/md-reader/releases)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/Neilooo/md-reader/total)](https://github.com/Neilooo/md-reader/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)]()
+这个版本保留了原项目轻量、快速、所见即所得预览的特点，并在界面、标签页、源码编辑、右键菜单、状态栏和导出体验上做了二次优化。
 
-A lightweight, fast, WYSIWYG **Markdown viewer / reader / preview** for Windows. Built with **Tauri 2 + Vue 3 + Rust**.
+## 主要功能
 
-Small footprint (~5 MB), fast startup, full Markdown rendering, KaTeX math, Mermaid diagrams, syntax highlighting, file tree, full-text search, and high-fidelity PDF/HTML/DOCX export.
+- 打开单个 Markdown 文件，或打开文件夹浏览多个 Markdown 文件
+- 像浏览器一样用标签页切换多个文档
+- 支持预览模式和源码模式，源码模式可以编辑并保存
+- 支持 Markdown 常用语法、代码高亮、表格、引用块、任务列表、脚注等
+- 支持 KaTeX 数学公式和 Mermaid 图表
+- 支持当前文档查找和文件夹全文搜索
+- 支持大纲跳转、文件树、侧栏显示隐藏
+- 支持日间/夜间主题和中英文界面切换
+- 支持记录窗口大小、窗口位置和阅读进度
+- 支持导出为 PDF、HTML、TXT
+- 支持底部状态栏显示当前文件路径、大小和字数信息
 
-📦 **[Download the latest release](https://github.com/Neilooo/md-reader/releases/latest)**
+## 快捷键
 
----
+| 快捷键 | 作用 |
+| --- | --- |
+| `Ctrl+F` | 查找当前文档 |
+| `Ctrl+Shift+F` | 在当前文件夹里全文搜索 |
+| `Ctrl+,` | 打开阅读设置 |
+| `Ctrl+S` | 在源码模式下保存当前文件 |
+| `Ctrl+E` | 打开或关闭导出菜单 |
+| `Ctrl+R` | 重新读取当前文件 |
+| `Ctrl+P` | 打印 |
+| `Esc` | 关闭当前弹出的查找框、设置面板或右键菜单 |
 
-## Features
+## 右键菜单
 
-### Reading
-- CommonMark + GitHub Flavored Markdown
-- Syntax highlighting with highlight.js
-- Math formulas with KaTeX
-- Diagrams with Mermaid
-- Task lists, footnotes, emoji, heading anchors
-- Light / dark theme
-- Chinese / English UI switch
+正文区域右键菜单提供：
 
-### Navigation
-- File tree for Markdown folders
-- Outline / TOC with scroll sync
-- Resizable three-column layout
-- Internal Markdown links: `[text](./other.md#heading)`
-- Relative image path rewriting
+- 查找当前文档
+- 重新读取文件
+- 复制选中文字
+- 复制文件路径
+- 导出 PDF、TXT、HTML
+- 打印
 
-### Search
-- `Ctrl+F` find in current document
-- `Ctrl+Shift+F` full-text search across files (Rust backend)
+标签页右键菜单提供：
 
-### Export
-- **PDF**: Edge headless, 1-3 seconds, WYSIWYG, no LaTeX required
-- **HTML**: self-contained single file with images/CSS embedded
-- **DOCX**: powered by pandoc
+- 刷新切页
+- 关闭当前切页
+- 关闭其他切页
+- 复制文件路径
 
-### Desktop integration
-- File association for `.md / .markdown / .mdx`
-- Single-instance behavior: opening another file reuses the existing window
-- Drag and drop files into the window
-- Recent files and per-file scroll position restore
+空白区域不会弹出自定义右键菜单。
 
----
+## 运行和开发
 
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `Ctrl+F` | Find in current document |
-| `Ctrl+Shift+F` | Full-text search |
-| `Ctrl+,` | Reading settings |
-| `Ctrl+S` | Export HTML |
-| `Ctrl+P` | System print / Save as PDF |
-| `Esc` | Close find/settings |
-
----
-
-## Installation
-
-### Windows
-
-Download from the [Releases page](https://github.com/Neilooo/md-reader/releases/latest):
-
-| File | Description |
-|---|---|
-| `MD-Reader-*-windows-x64-setup.msi` | Installer with file association support |
-| `MD-Reader-*-windows-x64-portable.exe` | Portable executable, no registry changes |
-
-> Windows 10 / 11 usually includes WebView2 Runtime. Older Windows 10 builds may need the [Microsoft WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
-
----
-
-## External Dependencies
-
-Core reading features require **no external tools**. Optional features need the tools below:
-
-| Feature | Dependency | Included on Windows 10/11 | Notes |
-|---|---|:-:|---|
-| Reading / file tree / search / math / diagrams / HTML export | None | — | Works out of the box |
-| **PDF export** | Microsoft Edge / Chrome | ✅ Edge usually included | Used for WYSIWYG PDF export |
-| **DOCX export** | [pandoc](https://pandoc.org/) ≥ 2.x | ❌ | Install only if you need DOCX |
-| Print | System print dialog | ✅ | Optional fallback |
-
-### Install pandoc (DOCX export only)
-
-```powershell
-winget install --id JohnMacFarlane.Pandoc -e
-```
-
-Or download it from [pandoc.org/installing.html](https://pandoc.org/installing.html). Restart MD Reader after installing pandoc.
-
-> PDF / HTML export does **not** require pandoc.
-
----
-
-## Development
-
-### Requirements
-
-| Tool | Version | Install |
-|---|---|---|
-| Node.js | ≥ 18 | https://nodejs.org/ |
-| pnpm | ≥ 8 | `npm install -g pnpm` |
-| Rust | ≥ 1.77 | https://rustup.rs/ |
-| WebView2 Runtime | — | Usually included on Windows 10/11 |
-| Visual Studio Build Tools | 2019+ | `Desktop development with C++` workload |
-
-### Commands
+安装依赖：
 
 ```bash
 pnpm install
-pnpm tauri dev
-pnpm tauri build
-pnpm lint
-pnpm format
 ```
 
----
+开发运行：
 
-## Tech Stack
+```bash
+pnpm tauri dev
+```
 
-- **Desktop**: Tauri 2 (Rust + WebView2)
-- **Frontend**: Vue 3 + TypeScript + Vite
-- **Markdown**: markdown-it plugins
-- **Math**: KaTeX
-- **Diagrams**: Mermaid
-- **Highlighting**: highlight.js
-- **PDF export**: system Edge `--headless=new --print-to-pdf`
-- **DOCX export**: pandoc
-- **File watching**: notify + notify-debouncer-mini
-- **Full-text search**: walkdir + line scanning
-- **File association / single instance**: tauri-plugin-single-instance
-- **i18n**: vue-i18n
+生成正式版：
 
----
+```bash
+pnpm tauri build
+```
 
-## How PDF Export Works
+编译完成后，绿色版程序一般在：
 
-MD Reader does not use LaTeX for PDF export.
+```text
+src-tauri/target/release/md-reader.exe
+```
 
-1. The frontend clones the already-rendered DOM (KaTeX and Mermaid are already rendered)
-2. Images are embedded as base64 and CSS is inlined
-3. Rust writes a temporary HTML file under `%TEMP%`
-4. System Edge runs in headless mode: `--headless=new --print-to-pdf=...`
-5. The generated PDF is copied to the user-selected output path
+安装包一般在：
 
-Result: fast, high-fidelity, WYSIWYG PDF export in 1-3 seconds.
+```text
+src-tauri/target/release/bundle/nsis/
+```
 
----
+## 开发环境
 
-## FAQ
+需要提前准备：
 
-### WebView2 is missing
+- Node.js
+- pnpm
+- Rust
+- Windows WebView2 运行环境
+- Visual Studio 生成工具，安装“使用 C++ 的桌面开发”相关组件
 
-Install the WebView2 Evergreen Runtime from Microsoft: https://developer.microsoft.com/microsoft-edge/webview2/
+Windows 10/11 通常已经自带 WebView2。如果缺失，可以安装 Microsoft WebView2 Evergreen Runtime。
 
-### PDF export cannot find Edge
+## 技术栈
 
-MD Reader will ask you to choose `msedge.exe`. Chrome also works if Edge is unavailable.
+- 桌面壳：Tauri 2
+- 前端：Vue 3、TypeScript、Vite
+- Markdown 渲染：markdown-it
+- 代码高亮：highlight.js
+- 数学公式：KaTeX
+- 图表：Mermaid
+- 国际化：vue-i18n
 
-### DOCX export says pandoc is missing
+## 项目来源
 
-Install pandoc and restart MD Reader.
+本项目根据 [Neilooo/md-reader](https://github.com/Neilooo/md-reader) 修改维护。
 
-### Does it support macOS / Linux?
+原项目采用 MIT 许可证，本项目继续保留 MIT 许可证。
 
-The codebase is based on Tauri and should be portable, but the official release currently targets Windows.
-
----
-
-## License
+## 许可证
 
 MIT

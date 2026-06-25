@@ -3,16 +3,16 @@
   "private": true,
   "version": "0.1.1",
   "type": "module",
-  "description": "A lightweight, fast, WYSIWYG Markdown desktop reader built with Tauri 2 + Vue 3. Supports KaTeX, Mermaid, full-text search, and PDF/DOCX export.",
+  "description": "A Windows Markdown desktop reader based on Neilooo/md-reader, with tabs, preview/source editing, search, and PDF/HTML/TXT export.",
   "author": "Neilooo",
   "license": "MIT",
-  "homepage": "https://github.com/Neilooo/md-reader#readme",
+  "homepage": "https://github.com/zer-haha/md-reader#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Neilooo/md-reader.git"
+    "url": "https://github.com/zer-haha/md-reader.git"
   },
   "bugs": {
-    "url": "https://github.com/Neilooo/md-reader/issues"
+    "url": "https://github.com/zer-haha/md-reader/issues"
   },
   "keywords": [
     "markdown",

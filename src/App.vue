@@ -70,6 +70,10 @@ interface ContextMenuState {
   y: number;
 }
 
+interface TabContextMenuState extends ContextMenuState {
+  path: string;
+}
+
 const TABS_STORAGE = "md-reader-tabs";
 const ACTIVE_TAB_STORAGE = "md-reader-active-tab";
 const TAB_MODE_STORAGE = "md-reader-tab-mode";
@@ -157,6 +161,12 @@ const contextMenu = ref<ContextMenuState>({
   visible: false,
   x: 0,
   y: 0,
+});
+const tabContextMenu = ref<TabContextMenuState>({
+  visible: false,
+  x: 0,
+  y: 0,
+  path: "",
 });
 
 const { width: leftWidth, startResize: resizeLeft } = useResizable(
@@ -280,8 +290,30 @@ function closeContextMenu() {
   contextMenu.value.visible = false;
 }
 
+function closeTabContextMenu() {
+  tabContextMenu.value.visible = false;
+  tabContextMenu.value.path = "";
+}
+
+function closeAllContextMenus() {
+  closeContextMenu();
+  closeTabContextMenu();
+}
+
+function closeAllMenus() {
+  closeAllContextMenus();
+  showExportMenu.value = false;
+}
+
 function openContextMenu(event: MouseEvent) {
+  const target = event.target as HTMLElement | null;
+  if (!target?.closest(".markdown-body, .source-shell")) {
+    event.preventDefault();
+    closeAllContextMenus();
+    return;
+  }
   event.preventDefault();
+  closeTabContextMenu();
   showExportMenu.value = false;
   selectedText.value = window.getSelection()?.toString().trim() || "";
   const menuWidth = 250;
@@ -300,9 +332,37 @@ function openContextMenu(event: MouseEvent) {
   };
 }
 
+function openTabContextMenu(event: MouseEvent, path: string) {
+  event.preventDefault();
+  closeContextMenu();
+  showExportMenu.value = false;
+  const menuWidth = 230;
+  const menuHeight = 190;
+  const margin = 8;
+  tabContextMenu.value = {
+    visible: true,
+    path,
+    x: Math.max(
+      margin,
+      Math.min(event.clientX, window.innerWidth - menuWidth - margin)
+    ),
+    y: Math.max(
+      margin,
+      Math.min(event.clientY, window.innerHeight - menuHeight - margin)
+    ),
+  };
+}
+
 async function runContextAction(action: () => void | Promise<void>) {
   closeContextMenu();
   await action();
+}
+
+async function runTabContextAction(action: (path: string) => void | Promise<void>) {
+  const { path } = tabContextMenu.value;
+  closeTabContextMenu();
+  if (!path) return;
+  await action(path);
 }
 
 async function copyText(text: string) {
@@ -332,6 +392,47 @@ async function copyCurrentFilePath() {
 
 async function reloadCurrentFile() {
   if (currentFile.value) await loadFile(currentFile.value, "", true);
+}
+
+async function refreshTab(path: string) {
+  if (!path) return;
+  const tab = tabs.value.find((item) => item.path === path);
+  if (tab?.dirty) {
+    exportToast.value = "有未保存修改，未刷新";
+    return;
+  }
+  if (path === currentFile.value) {
+    await reloadCurrentFile();
+    return;
+  }
+  try {
+    const text = await readTextFile(path);
+    const nextHeadings = extractHeadings(text);
+    if (tab) {
+      tab.content = text;
+      tab.headings = nextHeadings;
+      tab.errorMsg = "";
+      tab.loaded = true;
+      tab.dirty = false;
+      persistTabs();
+    }
+    exportToast.value = "已刷新";
+  } catch (e) {
+    exportToast.value = `刷新失败: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+async function closeOtherTabs(path: string) {
+  if (!path) return;
+  const keepTab = tabs.value.find((tab) => tab.path === path);
+  if (!keepTab) return;
+  if (currentFile.value !== path) await switchTab(path);
+  tabs.value = tabs.value.filter((tab) => tab.path === path);
+  persistTabs();
+}
+
+async function copyTabPath(path: string) {
+  await copyText(path);
 }
 
 function setCurrentDirty(dirty: boolean) {
@@ -640,17 +741,17 @@ async function closeTab(path: string) {
   if (next) {
     activeTabPath.value = "";
     await switchTab(next.path);
-    } else {
-      activeTabPath.value = "";
-      currentFile.value = "";
-      content.value = "";
-      errorMsg.value = "";
-      headings.value = [];
-      fileSize.value = null;
-      standaloneDirty.value = false;
-      find.clearHighlights();
-      persistTabs();
-    }
+  } else {
+    activeTabPath.value = "";
+    currentFile.value = "";
+    content.value = "";
+    errorMsg.value = "";
+    headings.value = [];
+    fileSize.value = null;
+    standaloneDirty.value = false;
+    find.clearHighlights();
+    persistTabs();
+  }
 }
 
 function setTabMode(enabled: boolean) {
@@ -922,7 +1023,8 @@ function onKeydown(e: KeyboardEvent) {
       showExportMenu.value = !showExportMenu.value;
     }
   } else if (e.key === "Escape") {
-    if (contextMenu.value.visible) closeContextMenu();
+    if (tabContextMenu.value.visible) closeTabContextMenu();
+    else if (contextMenu.value.visible) closeContextMenu();
     else if (find.visible.value) find.close();
     else if (showSettings.value) showSettings.value = false;
   }
@@ -931,7 +1033,7 @@ function onKeydown(e: KeyboardEvent) {
 let scrollSaveTimer: number | null = null;
 function onViewerScroll() {
   onScroll();
-  closeContextMenu();
+  closeAllMenus();
   if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
   scrollSaveTimer = window.setTimeout(saveCurrentScroll, 400);
 }
@@ -1056,7 +1158,7 @@ watch(exportToast, (v) => {
 </script>
 
 <template>
-  <div class="app" @contextmenu="openContextMenu" @click="closeContextMenu">
+  <div class="app" @click="closeAllContextMenus" @contextmenu.prevent="closeAllContextMenus">
     <header class="toolbar">
       <div class="toolbar-group toolbar-left" role="group" aria-label="文件操作">
         <button class="btn action" @click="pickFile" :title="t('app.file') + ' .md'">
@@ -1220,6 +1322,7 @@ watch(exportToast, (v) => {
         role="button"
         tabindex="0"
         @click="switchTab(tab.path)"
+        @contextmenu.prevent.stop="openTabContextMenu($event, tab.path)"
         @keydown.enter.prevent="switchTab(tab.path)"
         @keydown.space.prevent="switchTab(tab.path)"
       >
@@ -1299,6 +1402,7 @@ watch(exportToast, (v) => {
         ref="viewerEl"
         class="viewer"
         @scroll.passive="onViewerScroll"
+        @contextmenu.stop="openContextMenu"
       >
         <FindBar
           :visible="find.visible.value"
@@ -1444,6 +1548,45 @@ watch(exportToast, (v) => {
         <Printer :size="15" :stroke-width="1.9" />
         <span>打印</span>
         <kbd>Ctrl+P</kbd>
+      </button>
+    </div>
+
+    <div
+      v-if="tabContextMenu.visible"
+      class="context-menu tab-context-menu"
+      :style="{ left: tabContextMenu.x + 'px', top: tabContextMenu.y + 'px' }"
+      @click.stop
+      @contextmenu.prevent.stop
+    >
+      <button
+        class="context-item"
+        @click="runTabContextAction(refreshTab)"
+      >
+        <RefreshCw :size="15" :stroke-width="1.9" />
+        <span>刷新切页</span>
+      </button>
+      <button
+        class="context-item"
+        @click="runTabContextAction(closeTab)"
+      >
+        <X :size="15" :stroke-width="1.9" />
+        <span>关闭当前切页</span>
+      </button>
+      <button
+        class="context-item"
+        :disabled="tabs.length <= 1"
+        @click="runTabContextAction(closeOtherTabs)"
+      >
+        <PanelLeft :size="15" :stroke-width="1.9" />
+        <span>关闭其他切页</span>
+      </button>
+      <div class="context-divider"></div>
+      <button
+        class="context-item"
+        @click="runTabContextAction(copyTabPath)"
+      >
+        <FileText :size="15" :stroke-width="1.9" />
+        <span>复制文件路径</span>
       </button>
     </div>
 
@@ -1919,6 +2062,9 @@ watch(exportToast, (v) => {
   color: var(--fg);
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.22);
   z-index: 70;
+}
+.tab-context-menu {
+  width: 230px;
 }
 .context-item {
   width: 100%;
