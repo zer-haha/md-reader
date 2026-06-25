@@ -251,6 +251,92 @@ fn search_in_files(
     Ok(results)
 }
 
+#[tauri::command]
+fn open_file_directory(path: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    let dir = if path.is_dir() {
+        path
+    } else {
+        path.parent()
+            .ok_or_else(|| "无法找到文件所在目录".to_string())?
+            .to_path_buf()
+    };
+    if !dir.exists() {
+        return Err("目录不存在".to_string());
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new("explorer")
+            .arg(&dir)
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| format!("打开目录失败: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&dir)
+            .spawn()
+            .map_err(|e| format!("打开目录失败: {}", e))?;
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg(&dir)
+            .spawn()
+            .map_err(|e| format!("打开目录失败: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn rename_markdown_file(old_path: String, new_name: String) -> Result<String, String> {
+    let old_path = PathBuf::from(old_path);
+    if !old_path.is_file() {
+        return Err("文件不存在".to_string());
+    }
+
+    let mut name = new_name.trim().to_string();
+    if name.is_empty() {
+        return Err("文件名不能为空".to_string());
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err("文件名不能包含路径分隔符".to_string());
+    }
+    if Path::new(&name).extension().is_none() {
+        if let Some(ext) = old_path.extension().and_then(|ext| ext.to_str()) {
+            name.push('.');
+            name.push_str(ext);
+        }
+    }
+
+    let parent = old_path
+        .parent()
+        .ok_or_else(|| "无法找到文件所在目录".to_string())?;
+    let new_path = parent.join(name);
+    if !is_markdown_file(&new_path) {
+        return Err("只支持改名为 md、markdown、mdx 或 txt 文件".to_string());
+    }
+
+    let old_text = old_path.to_string_lossy().to_string();
+    let new_text = new_path.to_string_lossy().to_string();
+    if new_text.eq_ignore_ascii_case(&old_text) {
+        return Ok(strip_windows_extended_prefix(new_text));
+    }
+    if new_path.exists() {
+        return Err("同名文件已经存在".to_string());
+    }
+
+    std::fs::rename(&old_path, &new_path).map_err(|e| format!("改名失败: {}", e))?;
+    Ok(strip_windows_extended_prefix(new_text))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -288,6 +374,8 @@ pub fn run() {
             start_watch,
             stop_watch,
             search_in_files,
+            open_file_directory,
+            rename_markdown_file,
             check_pandoc,
             export_with_pandoc,
             pdf_utils::check_pdf_engine,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readTextFile, stat, writeTextFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -16,6 +17,7 @@ import {
   LoaderCircle,
   Moon,
   PanelLeft,
+  Pencil,
   Printer,
   RefreshCw,
   Search,
@@ -74,6 +76,10 @@ interface TabContextMenuState extends ContextMenuState {
   path: string;
 }
 
+interface FileContextMenuState extends ContextMenuState {
+  path: string;
+}
+
 const TABS_STORAGE = "md-reader-tabs";
 const ACTIVE_TAB_STORAGE = "md-reader-active-tab";
 const TAB_MODE_STORAGE = "md-reader-tab-mode";
@@ -124,7 +130,7 @@ const {
 } = useFileTree();
 
 const watcher = useFileWatcher();
-const { pushRecent, saveScroll, getScroll } = useHistory();
+const { pushRecent, saveScroll, getScroll, renamePath: renameHistoryPath } = useHistory();
 const { apply: applyReadingSettings } = useReadingSettings();
 
 const content = ref<string>("");
@@ -168,6 +174,14 @@ const tabContextMenu = ref<TabContextMenuState>({
   y: 0,
   path: "",
 });
+const treeContextMenu = ref<FileContextMenuState>({
+  visible: false,
+  x: 0,
+  y: 0,
+  path: "",
+});
+const selectedTreePath = ref("");
+const renamingTreePath = ref("");
 
 const { width: leftWidth, startResize: resizeLeft } = useResizable(
   "md-reader-left-w",
@@ -295,9 +309,15 @@ function closeTabContextMenu() {
   tabContextMenu.value.path = "";
 }
 
+function closeTreeContextMenu() {
+  treeContextMenu.value.visible = false;
+  treeContextMenu.value.path = "";
+}
+
 function closeAllContextMenus() {
   closeContextMenu();
   closeTabContextMenu();
+  closeTreeContextMenu();
 }
 
 function closeAllMenus() {
@@ -335,11 +355,35 @@ function openContextMenu(event: MouseEvent) {
 function openTabContextMenu(event: MouseEvent, path: string) {
   event.preventDefault();
   closeContextMenu();
+  closeTreeContextMenu();
   showExportMenu.value = false;
   const menuWidth = 230;
   const menuHeight = 190;
   const margin = 8;
   tabContextMenu.value = {
+    visible: true,
+    path,
+    x: Math.max(
+      margin,
+      Math.min(event.clientX, window.innerWidth - menuWidth - margin)
+    ),
+    y: Math.max(
+      margin,
+      Math.min(event.clientY, window.innerHeight - menuHeight - margin)
+    ),
+  };
+}
+
+function openTreeContextMenu(event: MouseEvent, path: string) {
+  event.preventDefault();
+  selectedTreePath.value = path;
+  closeContextMenu();
+  closeTabContextMenu();
+  showExportMenu.value = false;
+  const menuWidth = 230;
+  const menuHeight = 170;
+  const margin = 8;
+  treeContextMenu.value = {
     visible: true,
     path,
     x: Math.max(
@@ -361,6 +405,13 @@ async function runContextAction(action: () => void | Promise<void>) {
 async function runTabContextAction(action: (path: string) => void | Promise<void>) {
   const { path } = tabContextMenu.value;
   closeTabContextMenu();
+  if (!path) return;
+  await action(path);
+}
+
+async function runTreeContextAction(action: (path: string) => void | Promise<void>) {
+  const { path } = treeContextMenu.value;
+  closeTreeContextMenu();
   if (!path) return;
   await action(path);
 }
@@ -433,6 +484,69 @@ async function closeOtherTabs(path: string) {
 
 async function copyTabPath(path: string) {
   await copyText(path);
+}
+
+async function openContainingDirectory(path: string) {
+  if (!path) return;
+  try {
+    await invoke("open_file_directory", { path });
+  } catch (e) {
+    exportToast.value = `打开目录失败: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+function startRenameFile(path: string) {
+  if (!path) return;
+  selectedTreePath.value = path;
+  renamingTreePath.value = path;
+  closeAllContextMenus();
+  showExportMenu.value = false;
+}
+
+function cancelRenameFile() {
+  renamingTreePath.value = "";
+}
+
+async function applyRenamedPath(oldPath: string, newPath: string) {
+  if (!oldPath || !newPath || oldPath === newPath) return;
+  if (currentFile.value === oldPath) saveCurrentScroll();
+  const tab = tabs.value.find((item) => item.path === oldPath);
+  if (tab) {
+    tab.path = newPath;
+    tab.name = basename(newPath);
+  }
+  if (activeTabPath.value === oldPath) activeTabPath.value = newPath;
+  if (currentFile.value === oldPath) {
+    currentFile.value = newPath;
+    pushRecent(newPath);
+    await updateFileInfo(newPath, content.value);
+  }
+  renameHistoryPath(oldPath, newPath);
+  const viewState = viewScrollByFile.get(oldPath);
+  if (viewState) {
+    viewScrollByFile.set(newPath, viewState);
+    viewScrollByFile.delete(oldPath);
+  }
+  if (selectedTreePath.value === oldPath) selectedTreePath.value = newPath;
+  persistTabs();
+  await refreshTree();
+}
+
+async function submitRenameFile(path: string, name: string) {
+  if (renamingTreePath.value !== path) return;
+  renamingTreePath.value = "";
+  const nextName = name.trim();
+  if (!nextName || nextName === basename(path)) return;
+  try {
+    const newPath = await invoke<string>("rename_markdown_file", {
+      oldPath: path,
+      newName: nextName,
+    });
+    await applyRenamedPath(path, newPath);
+    exportToast.value = "已重命名";
+  } catch (e) {
+    exportToast.value = `改名失败: ${e instanceof Error ? e.message : String(e)}`;
+  }
 }
 
 function setCurrentDirty(dirty: boolean) {
@@ -992,6 +1106,11 @@ function onInternalLink(path: string, hash: string) {
   void loadFile(path, hash);
 }
 
+function isEditableTarget(target: EventTarget | null) {
+  const el = target as HTMLElement | null;
+  return !!el?.closest("input, textarea, select, [contenteditable='true']");
+}
+
 function onKeydown(e: KeyboardEvent) {
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === "f" && !e.shiftKey) {
@@ -1022,8 +1141,16 @@ function onKeydown(e: KeyboardEvent) {
     if (content.value && !exportBusy.value) {
       showExportMenu.value = !showExportMenu.value;
     }
+  } else if (e.key === "F2" && selectedTreePath.value && !isEditableTarget(e.target)) {
+    const activeEl = document.activeElement as HTMLElement | null;
+    if (activeEl?.closest(".tree-scroll")) {
+      e.preventDefault();
+      startRenameFile(selectedTreePath.value);
+    }
   } else if (e.key === "Escape") {
-    if (tabContextMenu.value.visible) closeTabContextMenu();
+    if (renamingTreePath.value) cancelRenameFile();
+    else if (tabContextMenu.value.visible) closeTabContextMenu();
+    else if (treeContextMenu.value.visible) closeTreeContextMenu();
     else if (contextMenu.value.visible) closeContextMenu();
     else if (find.visible.value) find.close();
     else if (showSettings.value) showSettings.value = false;
@@ -1375,7 +1502,14 @@ watch(exportToast, (v) => {
               v-if="rootDir"
               :nodes="tree"
               :current-path="currentFile"
+              :selected-path="selectedTreePath"
+              :renaming-path="renamingTreePath"
               @open="loadFile"
+              @select="(path) => (selectedTreePath = path)"
+              @context="openTreeContextMenu"
+              @rename="startRenameFile"
+              @submit-rename="submitRenameFile"
+              @cancel-rename="cancelRenameFile"
             />
             <div v-else class="empty-tip">
               {{ t("app.openFolderHint").split("\n")[0] }}<br />{{ t("app.openFolderHint").split("\n")[1] }}
@@ -1567,6 +1701,13 @@ watch(exportToast, (v) => {
       </button>
       <button
         class="context-item"
+        @click="runTabContextAction(openContainingDirectory)"
+      >
+        <FolderOpen :size="15" :stroke-width="1.9" />
+        <span>打开目录</span>
+      </button>
+      <button
+        class="context-item"
         @click="runTabContextAction(closeTab)"
       >
         <X :size="15" :stroke-width="1.9" />
@@ -1586,6 +1727,45 @@ watch(exportToast, (v) => {
         @click="runTabContextAction(copyTabPath)"
       >
         <FileText :size="15" :stroke-width="1.9" />
+        <span>复制文件路径</span>
+      </button>
+    </div>
+
+    <div
+      v-if="treeContextMenu.visible"
+      class="context-menu tree-context-menu"
+      :style="{ left: treeContextMenu.x + 'px', top: treeContextMenu.y + 'px' }"
+      @click.stop
+      @contextmenu.prevent.stop
+    >
+      <button
+        class="context-item"
+        @click="runTreeContextAction(loadFile)"
+      >
+        <FileText :size="15" :stroke-width="1.9" />
+        <span>打开文件</span>
+      </button>
+      <button
+        class="context-item"
+        @click="runTreeContextAction(openContainingDirectory)"
+      >
+        <FolderOpen :size="15" :stroke-width="1.9" />
+        <span>打开目录</span>
+      </button>
+      <button
+        class="context-item"
+        @click="runTreeContextAction(startRenameFile)"
+      >
+        <Pencil :size="15" :stroke-width="1.9" />
+        <span>改名</span>
+        <kbd>F2</kbd>
+      </button>
+      <div class="context-divider"></div>
+      <button
+        class="context-item"
+        @click="runTreeContextAction(copyTabPath)"
+      >
+        <Copy :size="15" :stroke-width="1.9" />
         <span>复制文件路径</span>
       </button>
     </div>
@@ -2064,6 +2244,9 @@ watch(exportToast, (v) => {
   z-index: 70;
 }
 .tab-context-menu {
+  width: 230px;
+}
+.tree-context-menu {
   width: 230px;
 }
 .context-item {
