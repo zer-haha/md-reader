@@ -1,0 +1,97 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import type { Heading } from "../composables/useMarkdown";
+
+const { t } = useI18n();
+
+const props = defineProps<{
+  headings: Heading[];
+  activeId: string;
+}>();
+
+const emit = defineEmits<{
+  (e: "jump", id: string): void;
+}>();
+
+const minLevel = computed(() =>
+  props.headings.length
+    ? Math.min(...props.headings.map((h) => h.level))
+    : 1
+);
+</script>
+
+<template>
+  <div class="toc">
+    <div class="toc-title">{{ t("toc.title") }}</div>
+    <div v-if="!headings.length" class="empty">{{ t("toc.empty") }}</div>
+    <ul v-else class="toc-list">
+      <li
+        v-for="h in headings"
+        :key="h.id + h.text"
+        class="toc-item"
+        :class="{ active: activeId === h.id }"
+        :style="{ paddingLeft: (h.level - minLevel) * 12 + 8 + 'px' }"
+        :title="h.text"
+        @click="emit('jump', h.id)"
+      >
+        {{ h.text }}
+      </li>
+    </ul>
+  </div>
+</template>
+
+<style scoped>
+.toc {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  font-size: 13px;
+}
+.toc-title {
+  flex: 0 0 auto;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--fg-muted);
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.toc-list {
+  flex: 1 1 auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.toc-item {
+  padding: 3px 8px;
+  cursor: pointer;
+  color: var(--toc-item-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 2px solid transparent;
+  transition: color 0.12s, background-color 0.12s, box-shadow 0.12s;
+}
+.toc-item:hover {
+  color: var(--toc-hover-color);
+  background: var(--toc-hover-bg);
+}
+.toc-item.active {
+  color: var(--toc-active-color);
+  border-left-color: var(--toc-active-line);
+  background: var(--toc-active-bg);
+  box-shadow: var(--toc-active-shadow);
+  font-weight: 600;
+}
+.empty {
+  padding: 8px 12px;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+</style>
